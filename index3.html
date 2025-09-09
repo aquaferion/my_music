@@ -480,32 +480,19 @@
 </head>
 <body>
     <div class="container">
-        <!-- 헤더 -->
         <div class="header">
             <h1>🎵 나만의 음악 앨범 메이커</h1>
             <p>MP3 파일을 업로드하여 나만의 음악 앨범을 만들어보세요. 이제 트랙 합성 기능도 지원!</p>
         </div>
-
-        <!-- 네비게이션 -->
         <div class="main-nav">
-            <button class="back-btn" onclick="showAlbumList()">
-                ← 앨범 목록으로 돌아가기
-            </button>
+            <button class="back-btn" onclick="showAlbumList()">← 앨범 목록으로 돌아가기</button>
             <div class="action-buttons">
-                <button class="btn secondary" id="editBtn" onclick="toggleEdit()" style="display: none;">
-                    ✏️ 앨범 편집
-                </button>
+                <button class="btn secondary" id="editBtn" onclick="toggleEdit()" style="display: none;">✏️ 앨범 편집</button>
                 <input type="file" id="fileInput" class="file-input" multiple accept=".mp3,.m4a,.wav,.mp4,audio/*" onchange="addTracks(this.files)">
-                <button class="btn success" onclick="document.getElementById('fileInput').click()" id="addTrackBtn" style="display: none;">
-                    📁 곡 추가
-                </button>
-                <button class="btn" onclick="createNewAlbum()">
-                    ➕ 새 앨범 만들기
-                </button>
+                <button class="btn success" onclick="document.getElementById('fileInput').click()" id="addTrackBtn" style="display: none;">📁 곡 추가</button>
+                <button class="btn" onclick="createNewAlbum()">➕ 새 앨범 만들기</button>
             </div>
         </div>
-
-        <!-- 앨범 목록 -->
         <div id="albumsList" class="albums-list">
             <div class="albums-grid" id="albumsGrid"></div>
             <div class="empty-state" id="emptyState">
@@ -516,8 +503,6 @@
                 <button class="btn" onclick="createNewAlbum()">첫 번째 앨범 만들기</button>
             </div>
         </div>
-
-        <!-- 앨범 상세 -->
         <div id="albumDetail" class="album-detail">
             <div class="album-info">
                 <div class="album-info-card">
@@ -588,8 +573,6 @@
             </div>
         </div>
     </div>
-
-    <!-- 오디오 플레이어 -->
     <div id="player" class="player">
         <div class="player-content">
             <button class="play-btn" id="playerPlayBtn" onclick="togglePlay()">▶️</button>
@@ -608,7 +591,6 @@
         </div>
         <audio id="audioPlayer" onloadedmetadata="updateDuration()" ontimeupdate="updateProgress()" onended="onTrackEnd()"></audio>
     </div>
-
     <script>
         let albums = [];
         let currentAlbum = null;
@@ -808,31 +790,24 @@
                     alert(`파일 ${file.name}이 너무 큽니다. 50MB 이하 파일을 사용하세요.`);
                     return;
                 }
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    console.log('파일 로드 완료:', file.name);
-                    const track = {
-                        id: Date.now() + Math.random(),
-                        title: file.name.replace(/\.[^/.]+$/, ""),
-                        artist: currentAlbum.artist || '',
-                        url: URL.createObjectURL(file), // 파일 객체로 URL 생성, base64 대신
-                        duration: 0,
-                        plays: 0,
-                        selected: false
-                    };
-                    currentAlbum.tracks.push(track);
-                    filesProcessed++;
-                    if (filesProcessed === files.length) {
-                        console.log('모든 파일 처리 완료, 트랙 렌더링');
-                        saveData();
-                        renderTracks();
-                    }
+                const url = URL.createObjectURL(file); // 파일 참조 URL 생성
+                console.log('파일 로드 완료:', file.name);
+                const track = {
+                    id: Date.now() + Math.random(),
+                    title: file.name.replace(/\.[^/.]+$/, ""),
+                    artist: currentAlbum.artist || '',
+                    url: url,
+                    duration: 0,
+                    plays: 0,
+                    selected: false
                 };
-                reader.onerror = function(e) {
-                    console.error('파일 로드 오류:', file.name, e);
-                    alert(`파일 ${file.name} 로드에 실패했습니다.`);
-                };
-                reader.readAsDataURL(file); // 여전히 Data URL 사용 가능
+                currentAlbum.tracks.push(track);
+                filesProcessed++;
+                if (filesProcessed === files.length) {
+                    console.log('모든 파일 처리 완료, 트랙 렌더링');
+                    saveData();
+                    renderTracks();
+                }
             });
         }
 
@@ -894,14 +869,20 @@
                     const arrayBuffer = await response.arrayBuffer();
                     return audioContext.decodeAudioData(arrayBuffer);
                 }));
-                const maxLength = Math.max(...buffers.map(b => b.length));
-                const mergedBuffer = audioContext.createBuffer(2, maxLength, buffers[0].sampleRate);
-                buffers.forEach(buffer => {
-                    for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
-                        mergedBuffer.getChannelData(channel).set(buffer.getChannelData(channel));
+                const offlineContext = new OfflineAudioContext(2, Math.max(...buffers.map(b => b.length)), buffers[0].sampleRate);
+                const source = offlineContext.createBufferSource();
+                source.buffer = buffers.reduce((merged, buffer) => {
+                    const newBuffer = offlineContext.createBuffer(2, Math.max(merged.length, buffer.length), offlineContext.sampleRate);
+                    for (let channel = 0; channel < 2; channel++) {
+                        newBuffer.copyToChannel(merged.getChannelData(channel), channel);
+                        newBuffer.copyToChannel(buffer.getChannelData(channel), channel, merged.length);
                     }
-                });
-                const wavBlob = await exportToWav(mergedBuffer);
+                    return newBuffer;
+                }, offlineContext.createBuffer(2, 0, offlineContext.sampleRate));
+                source.connect(offlineContext.destination);
+                source.start();
+                const renderedBuffer = await offlineContext.startRendering();
+                const wavBlob = await exportToWav(renderedBuffer);
                 const url = URL.createObjectURL(wavBlob);
                 const newTrack = {
                     id: Date.now() + Math.random(),
@@ -929,9 +910,46 @@
             return new Promise(resolve => {
                 const wav = audioContext.createBufferSource();
                 wav.buffer = buffer;
-                const wavBlob = new Blob([buffer], { type: 'audio/wav' });
+                const wavData = audioBufferToWav(buffer);
+                const wavBlob = new Blob([wavData], { type: 'audio/wav' });
                 resolve(wavBlob);
             });
+        }
+
+        function audioBufferToWav(buffer) {
+            const numChannels = buffer.numberOfChannels;
+            const length = buffer.length * numChannels * 2 + 44;
+            const arrayBuffer = new ArrayBuffer(length);
+            const view = new DataView(arrayBuffer);
+            let offset = 0;
+
+            function writeString(s) { for (let i = 0; i < s.length; i++) view.setUint8(offset++, s.charCodeAt(i)); }
+            function writeUint16(n) { view.setUint16(offset, n, true); offset += 2; }
+            function writeUint32(n) { view.setUint32(offset, n, true); offset += 4; }
+
+            writeString('RIFF');
+            writeUint32(length - 8);
+            writeString('WAVE');
+            writeString('fmt ');
+            writeUint32(16);
+            writeUint16(1);
+            writeUint16(numChannels);
+            writeUint32(buffer.sampleRate);
+            writeUint32(buffer.sampleRate * numChannels * 2);
+            writeUint16(numChannels * 2);
+            writeUint16(16);
+            writeString('data');
+            writeUint32(buffer.length * numChannels * 2);
+
+            for (let i = 0; i < buffer.length; i++) {
+                for (let channel = 0; channel < numChannels; channel++) {
+                    const sample = buffer.getChannelData(channel)[i];
+                    view.setInt16(offset, sample * 0x7FFF, true);
+                    offset += 2;
+                }
+            }
+
+            return arrayBuffer;
         }
 
         function downloadBlob(blob, filename) {
@@ -1084,7 +1102,7 @@
         }
 
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('페이지 로드, Crunker 상태:', typeof Crunker);
+            console.log('페이지 로드');
             loadData();
         });
     </script>
