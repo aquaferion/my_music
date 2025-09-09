@@ -5,7 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>나만의 음악 앨범 메이커</title>
     <!-- Crunker 라이브러리 CDN 추가 (오디오 합성용) -->
-    <script src="https://unpkg.com/crunker"></script>
+    <script src="https://unpkg.com/crunker@latest/crunker.min.js"></script>
+
+
     <style>
         * {
             margin: 0;
@@ -584,7 +586,7 @@
                          ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
                         <div style="font-size: 40px; margin-bottom: 15px;">📁</div>
                         <p>클릭하거나 파일을 여기로 드래그하여 곡을 추가하세요</p>
-                        <p style="font-size: 0.9em; opacity: 0.7; margin-top: 10px;">MP3, M4A, WAV 파일 지원</p>
+                        <p style="font-size: 0.9em; opacity: 0.7; margin-top: 10px;">MP3, M4A, WAV 파일 지원 (최대 5MB 권장)</p>
                     </div>
                     
                     <div id="tracksList">
@@ -596,8 +598,8 @@
                         <h3>아직 곡이 없습니다</h3>
                         <p>위의 업로드 영역을 클릭하여 첫 번째 곡을 추가해보세요</p>
                     </div>
-                    <!-- 합성 버튼 추가 -->
-                    <button class="btn" onclick="mergeSelectedTracks()" id="mergeBtn" style="display: none; margin-top: 20px;">🔄 선택 트랙 합성 (2-3개)</button>
+                    <!-- 합성 버튼 -->
+                    <button class="btn" onclick="mergeSelectedTracks()" style="margin-top: 20px;">🔄 선택 트랙 합성 (2-3개)</button>
                 </div>
             </div>
         </div>
@@ -640,10 +642,17 @@
 
         // 로컬 스토리지에서 데이터 로드
         function loadData() {
+            console.log('데이터 로드 시작');
             const savedAlbums = localStorage.getItem('musicAlbums');
             if (savedAlbums) {
-                albums = JSON.parse(savedAlbums);
-                renderAlbums();
+                try {
+                    albums = JSON.parse(savedAlbums);
+                    console.log('로드된 앨범:', albums);
+                    renderAlbums();
+                } catch (error) {
+                    console.error('데이터 파싱 오류:', error);
+                    alert('저장된 데이터를 로드할 수 없습니다.');
+                }
             } else {
                 showEmptyState();
             }
@@ -651,11 +660,19 @@
 
         // 로컬 스토리지에 데이터 저장
         function saveData() {
-            localStorage.setItem('musicAlbums', JSON.stringify(albums));
+            console.log('데이터 저장 시도:', albums);
+            try {
+                localStorage.setItem('musicAlbums', JSON.stringify(albums));
+                console.log('데이터 저장 완료');
+            } catch (error) {
+                console.error('LocalStorage 저장 오류:', error);
+                alert('데이터 저장에 실패했습니다. 파일 크기가 너무 클 수 있습니다.');
+            }
         }
 
         // 새 앨범 생성
         function createNewAlbum() {
+            console.log('새 앨범 생성');
             const newAlbum = {
                 id: Date.now(),
                 title: `새 앨범 ${albums.length + 1}`,
@@ -678,6 +695,7 @@
 
         // 앨범 목록 렌더링
         function renderAlbums() {
+            console.log('앨범 목록 렌더링');
             const grid = document.getElementById('albumsGrid');
             grid.innerHTML = '';
 
@@ -703,7 +721,6 @@
                 grid.appendChild(albumCard);
             });
 
-            // 빈 상태 처리
             if (albums.length === 0) {
                 showEmptyState();
             } else {
@@ -713,34 +730,33 @@
 
         // 빈 상태 표시
         function showEmptyState() {
+            console.log('빈 상태 표시');
             document.getElementById('emptyState').style.display = 'block';
         }
 
         // 앨범 상세 보기
         function showAlbumDetail(album) {
+            console.log('앨범 상세 보기:', album.title);
             currentAlbum = album;
             
-            // UI 전환
             document.getElementById('albumsList').style.display = 'none';
             document.getElementById('albumDetail').classList.add('active');
             document.querySelector('.back-btn').style.display = 'block';
             document.getElementById('editBtn').style.display = 'block';
             document.getElementById('addTrackBtn').style.display = 'block';
-            document.getElementById('mergeBtn').style.display = 'block'; // 합성 버튼 표시
             
-            // 앨범 정보 표시
             updateAlbumDisplay();
             renderTracks();
         }
 
         // 앨범 목록으로 돌아가기
         function showAlbumList() {
+            console.log('앨범 목록으로 돌아가기');
             document.getElementById('albumsList').style.display = 'block';
             document.getElementById('albumDetail').classList.remove('active');
             document.querySelector('.back-btn').style.display = 'none';
             document.getElementById('editBtn').style.display = 'none';
             document.getElementById('addTrackBtn').style.display = 'none';
-            document.getElementById('mergeBtn').style.display = 'none'; // 합성 버튼 숨김
             
             currentAlbum = null;
             isEditing = false;
@@ -752,6 +768,7 @@
         function updateAlbumDisplay() {
             if (!currentAlbum) return;
             
+            console.log('앨범 정보 업데이트:', currentAlbum.title);
             const coverElement = document.getElementById('detailAlbumCover');
             if (currentAlbum.coverImage) {
                 coverElement.style.backgroundImage = `url(${currentAlbum.coverImage})`;
@@ -769,7 +786,6 @@
             document.getElementById('detailTrackCount').textContent = `${currentAlbum.tracks.length}곡`;
             document.getElementById('detailCreatedAt').textContent = currentAlbum.createdAt;
             
-            // 편집 폼 업데이트
             document.getElementById('editTitle').value = currentAlbum.title;
             document.getElementById('editArtist').value = currentAlbum.artist;
             document.getElementById('editGenre').value = currentAlbum.genre;
@@ -797,7 +813,6 @@
                 form.classList.remove('active');
                 btn.textContent = '✏️ 앨범 편집';
                 
-                // 편집 내용 저장
                 if (currentAlbum) {
                     currentAlbum.title = document.getElementById('editTitle').value;
                     currentAlbum.artist = document.getElementById('editArtist').value;
@@ -815,11 +830,16 @@
         function handleCoverUpload(input) {
             const file = input.files[0];
             if (file && currentAlbum) {
+                console.log('앨범 커버 업로드:', file.name);
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     currentAlbum.coverImage = e.target.result;
                     saveData();
                     updateAlbumDisplay();
+                };
+                reader.onerror = function(e) {
+                    console.error('커버 이미지 로드 오류:', e);
+                    alert('커버 이미지 업로드에 실패했습니다.');
                 };
                 reader.readAsDataURL(file);
             }
@@ -827,12 +847,24 @@
 
         // 트랙 추가
         function addTracks(files) {
-            if (!currentAlbum || !files.length) return;
+            if (!currentAlbum || !files.length) {
+                console.warn('앨범 없음 또는 파일 선택 안됨');
+                alert('앨범을 선택하거나 파일을 업로드하세요.');
+                return;
+            }
             
+            console.log('트랙 추가 시작, 파일 수:', files.length);
             let filesProcessed = 0;
             Array.from(files).forEach(file => {
+                if (file.size > 15 * 1024 * 1024) { // 5MB 제한
+                    console.warn(`파일 크기 초과: ${file.name}`);
+                    alert(`파일 ${file.name}이 너무 큽니다. 5MB 이하 파일을 사용하세요.`);
+                    return;
+                }
+                
                 const reader = new FileReader();
                 reader.onload = function(e) {
+                    console.log('파일 로드 완료:', file.name);
                     const track = {
                         id: Date.now() + Math.random(),
                         title: file.name.replace(/\.[^/.]+$/, ""),
@@ -840,15 +872,20 @@
                         url: e.target.result, // base64 데이터 URL 저장
                         duration: 0,
                         plays: 0,
-                        selected: false // 합성용 선택 상태 추가
+                        selected: false
                     };
                     
                     currentAlbum.tracks.push(track);
                     filesProcessed++;
                     if (filesProcessed === files.length) {
+                        console.log('모든 파일 처리 완료, 트랙 렌더링');
                         saveData();
                         renderTracks();
                     }
+                };
+                reader.onerror = function(e) {
+                    console.error('파일 로드 오류:', file.name, e);
+                    alert(`파일 ${file.name} 로드에 실패했습니다.`);
                 };
                 reader.readAsDataURL(file);
             });
@@ -859,17 +896,20 @@
             const track = currentAlbum.tracks.find(t => t.id === trackId);
             if (track) {
                 track.selected = checked;
+                console.log(`트랙 선택 상태 변경: ${track.title}, ${checked}`);
             }
         }
 
-        // 트랙 렌더링 (체크박스 추가)
+        // 트랙 렌더링
         function renderTracks() {
+            console.log('트랙 렌더링 시작');
             const tracksList = document.getElementById('tracksList');
             const emptyState = document.getElementById('tracksEmptyState');
             
-            if (currentAlbum.tracks.length === 0) {
+            if (!currentAlbum || currentAlbum.tracks.length === 0) {
                 tracksList.innerHTML = '';
                 emptyState.style.display = 'block';
+                console.log('트랙 없음, 빈 상태 표시');
                 return;
             }
             
@@ -897,31 +937,27 @@
                 
                 tracksList.appendChild(trackElement);
             });
+            console.log('트랙 렌더링 완료');
         }
 
-        // 선택된 트랙 합성 (새 기능)
+        // 선택된 트랙 합성
         async function mergeSelectedTracks() {
+            console.log('트랙 합성 시작');
             const selectedTracks = currentAlbum.tracks.filter(track => track.selected);
             if (selectedTracks.length < 2 || selectedTracks.length > 3) {
+                console.warn('선택된 트랙 수 부적합:', selectedTracks.length);
                 alert('2~3개의 트랙을 선택하세요.');
                 return;
             }
 
             try {
-                // 오디오 버퍼 가져오기
+                console.log('선택된 트랙:', selectedTracks.map(t => t.title));
                 const buffers = await crunker.fetchAudio(...selectedTracks.map(track => track.url));
                 
-                // 병합 (merge: 믹싱, 또는 concatAudio로 연결 선택 가능)
-                const merged = crunker.mergeAudio(buffers); // 믹싱 (새 스타일 느낌)
-                // const merged = crunker.concatAudio(buffers); // 순차 연결
-                
-                // 옵션: 패딩 추가 (새로운 스타일 효과)
-                const padded = crunker.padAudio(merged, { seconds: 1 }); // 1초 침묵
-                
-                // export
+                const merged = crunker.mergeAudio(buffers);
+                const padded = crunker.padAudio(merged, { seconds: 1 });
                 const output = crunker.export(padded, 'audio/mp3');
                 
-                // 새 트랙 추가
                 const newTrack = {
                     id: Date.now() + Math.random(),
                     title: '합성된 새로운 트랙 ' + (currentAlbum.tracks.length + 1),
@@ -933,12 +969,11 @@
                 };
                 currentAlbum.tracks.push(newTrack);
                 
-                // 선택 해제
                 selectedTracks.forEach(track => track.selected = false);
                 
-                // 다운로드
                 crunker.download(output.blob);
                 
+                console.log('합성 완료, 새 트랙 추가');
                 saveData();
                 renderTracks();
                 alert('새로운 합성 트랙이 추가되었습니다! 다운로드도 시작됩니다.');
@@ -950,8 +985,12 @@
 
         // 트랙 재생
         function playTrack(trackId) {
+            console.log('트랙 재생 시도:', trackId);
             const track = currentAlbum.tracks.find(t => t.id === trackId);
-            if (!track) return;
+            if (!track) {
+                console.warn('트랙 없음:', trackId);
+                return;
+            }
             
             const audio = document.getElementById('audioPlayer');
             
@@ -959,9 +998,11 @@
                 if (isPlaying) {
                     audio.pause();
                     isPlaying = false;
+                    console.log('재생 일시정지');
                 } else {
                     audio.play().catch(error => console.error('재생 오류:', error));
                     isPlaying = true;
+                    console.log('재생 시작');
                 }
             } else {
                 currentTrack = track;
@@ -973,6 +1014,7 @@
                 document.getElementById('playerTitle').textContent = track.title;
                 document.getElementById('playerArtist').textContent = track.artist || '알 수 없는 아티스트';
                 document.getElementById('player').classList.add('active');
+                console.log('새 트랙 재생:', track.title);
             }
             
             updatePlayerButton();
@@ -981,16 +1023,21 @@
 
         // 플레이어 재생/일시정지 토글
         function togglePlay() {
-            if (!currentTrack) return;
+            if (!currentTrack) {
+                console.warn('재생할 트랙 없음');
+                return;
+            }
             
             const audio = document.getElementById('audioPlayer');
             
             if (isPlaying) {
                 audio.pause();
                 isPlaying = false;
+                console.log('플레이어 일시정지');
             } else {
                 audio.play().catch(error => console.error('재생 오류:', error));
                 isPlaying = true;
+                console.log('플레이어 재생');
             }
             
             updatePlayerButton();
@@ -1005,6 +1052,7 @@
 
         // 플레이어 닫기
         function closePlayer() {
+            console.log('플레이어 닫기');
             const audio = document.getElementById('audioPlayer');
             audio.pause();
             audio.src = '';
@@ -1057,6 +1105,7 @@
 
         // 트랙 종료 시
         function onTrackEnd() {
+            console.log('트랙 종료');
             isPlaying = false;
             updatePlayerButton();
             renderTracks();
@@ -1073,6 +1122,7 @@
                     closePlayer();
                 }
                 
+                console.log('트랙 삭제:', trackId);
                 saveData();
                 renderTracks();
             }
@@ -1084,6 +1134,7 @@
             
             if (confirm('이 앨범을 삭제하시겠습니까?')) {
                 albums = albums.filter(album => album.id !== albumId);
+                console.log('앨범 삭제:', albumId);
                 saveData();
                 
                 if (currentAlbum && currentAlbum.id === albumId) {
@@ -1098,15 +1149,18 @@
         function handleDragOver(event) {
             event.preventDefault();
             event.currentTarget.classList.add('dragover');
+            console.log('드래그 오버');
         }
 
         function handleDragLeave(event) {
             event.currentTarget.classList.remove('dragover');
+            console.log('드래그 떠남');
         }
 
         function handleDrop(event) {
             event.preventDefault();
             event.currentTarget.classList.remove('dragover');
+            console.log('드롭 발생, 파일 수:', event.dataTransfer.files.length);
             
             const files = event.dataTransfer.files;
             addTracks(files);
@@ -1114,6 +1168,12 @@
 
         // 페이지 로드 시 초기화
         document.addEventListener('DOMContentLoaded', function() {
+            if (typeof Crunker === 'undefined') {
+                console.error('Crunker 라이브러리 로드 실패');
+                alert('Crunker 라이브러리를 로드할 수 없습니다. 인터넷 연결을 확인하거나 로컬 파일로 실행 중인지 확인하세요.');
+            } else {
+                console.log('Crunker 라이브러리 로드 성공');
+            }
             loadData();
         });
     </script>
