@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>나만의 음악 앨범 메이커</title>
-    <!-- Crunker 라이브러리 CDN 추가 (오디오 합성용) -->
     <script src="https://unpkg.com/crunker@latest/crunker.min.js"></script>
     <style>
+        /* 이전 CSS 동일 */
         * {
             margin: 0;
             padding: 0;
@@ -447,22 +447,6 @@
             background: rgba(255, 107, 107, 0.1);
         }
 
-        .warning {
-            background: rgba(255, 193, 7, 0.1);
-            border: 1px solid rgba(255, 193, 7, 0.3);
-            border-radius: 10px;
-            padding: 15px;
-            margin: 15px 0;
-            color: #ffc107;
-        }
-
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-            opacity: 0.7;
-        }
-
         @media (max-width: 768px) {
             .albums-grid {
                 grid-template-columns: 1fr;
@@ -510,7 +494,7 @@
                 <button class="btn secondary" id="editBtn" onclick="toggleEdit()" style="display: none;">
                     ✏️ 앨범 편집
                 </button>
-                <input type="file" id="fileInput" class="file-input" multiple accept="audio/*,.mp3,.m4a,.wav,.mp4" onchange="addTracks(this.files)">
+                <input type="file" id="fileInput" class="file-input" multiple accept=".mp3,.m4a,.wav,.mp4,audio/*" onchange="addTracks(this.files)">
                 <button class="btn success" onclick="document.getElementById('fileInput').click()" id="addTrackBtn" style="display: none;">
                     📁 곡 추가
                 </button>
@@ -593,22 +577,14 @@
                 <!-- 트랙 리스트 -->
                 <div class="tracks-section">
                     <h3>트랙 리스트</h3>
-                    
-                    <div class="warning">
-                        ⚠️ 주의: 오디오 파일은 브라우저에서 임시로 저장됩니다. 페이지를 새로고침하면 파일이 사라질 수 있습니다.
-                    </div>
+                    <br>
                     
                     <!-- 파일 업로드 영역 -->
                     <div class="upload-area" onclick="document.getElementById('fileInput').click()" 
                          ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
                         <div style="font-size: 40px; margin-bottom: 15px;">📁</div>
                         <p>클릭하거나 파일을 여기로 드래그하여 곡을 추가하세요</p>
-                        <p style="font-size: 0.9em; opacity: 0.7; margin-top: 10px;">MP3, M4A, WAV 파일 지원 (권장: 10MB 이하)</p>
-                    </div>
-                    
-                    <div class="loading" id="loadingState">
-                        <div style="font-size: 40px; margin-bottom: 15px;">⏳</div>
-                        <p>파일을 처리하고 있습니다...</p>
+                        <p style="font-size: 0.9em; opacity: 0.7; margin-top: 10px;">MP3, M4A, WAV 파일 지원 (최대 5MB 권장)</p>
                     </div>
                     
                     <div id="tracksList">
@@ -620,11 +596,8 @@
                         <h3>아직 곡이 없습니다</h3>
                         <p>위의 업로드 영역을 클릭하여 첫 번째 곡을 추가해보세요</p>
                     </div>
-                    
                     <!-- 합성 버튼 -->
-                    <button class="btn" onclick="mergeSelectedTracks()" style="margin-top: 20px; display: none;" id="mergeBtn">
-                        🔄 선택 트랙 합성 (2-3개)
-                    </button>
+                    <button class="btn" onclick="mergeSelectedTracks()" style="margin-top: 20px;">🔄 선택 트랙 합성 (2-3개)</button>
                 </div>
             </div>
         </div>
@@ -663,89 +636,35 @@
         let isEditing = false;
         let currentTrack = null;
         let isPlaying = false;
-        let crunker = null;
+        let crunker = new Crunker(); // Crunker 인스턴스 생성
 
-        // Crunker 초기화 함수
-        function initializeCrunker() {
-            try {
-                if (typeof Crunker !== 'undefined') {
-                    crunker = new Crunker();
-                    console.log('Crunker 라이브러리 로드 성공');
-                } else {
-                    console.warn('Crunker 라이브러리를 로드할 수 없습니다.');
-                }
-            } catch (error) {
-                console.error('Crunker 초기화 오류:', error);
-            }
-        }
-
-        // 오디오 파일 유효성 검사
-        function isValidAudioFile(file) {
-            const validTypes = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/mp4', 'audio/m4a', 'audio/x-m4a'];
-            const validExtensions = ['.mp3', '.wav', '.m4a', '.mp4'];
-            
-            // MIME 타입 확인
-            if (validTypes.includes(file.type)) {
-                return true;
-            }
-            
-            // 확장자 확인 (MIME 타입이 없거나 부정확한 경우)
-            const fileName = file.name.toLowerCase();
-            return validExtensions.some(ext => fileName.endsWith(ext));
-        }
-
-        // 파일 크기 형식화
-        function formatFileSize(bytes) {
-            if (bytes === 0) return '0 Bytes';
-            const k = 1024;
-            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-            const i = Math.floor(Math.log(bytes) / Math.log(k));
-            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-        }
-
-        // 로컬 스토리지에서 데이터 로드 (오디오 파일 제외)
+        // 로컬 스토리지에서 데이터 로드
         function loadData() {
             console.log('데이터 로드 시작');
-            try {
-                const savedAlbums = localStorage.getItem('musicAlbums');
-                if (savedAlbums) {
-                    const parsedAlbums = JSON.parse(savedAlbums);
-                    // 오디오 URL이 있는 트랙들을 제거 (페이지 새로고침 시 무효화됨)
-                    albums = parsedAlbums.map(album => ({
-                        ...album,
-                        tracks: [] // 트랙은 세션별로 새로 추가해야 함
-                    }));
-                    console.log('로드된 앨범 (트랙 제외):', albums);
-                } else {
-                    albums = [];
+            const savedAlbums = localStorage.getItem('musicAlbums');
+            if (savedAlbums) {
+                try {
+                    albums = JSON.parse(savedAlbums);
+                    console.log('로드된 앨범:', albums);
+                    renderAlbums();
+                } catch (error) {
+                    console.error('데이터 파싱 오류:', error);
+                    alert('저장된 데이터를 로드할 수 없습니다.');
                 }
-                renderAlbums();
-            } catch (error) {
-                console.error('데이터 파싱 오류:', error);
-                albums = [];
-                renderAlbums();
+            } else {
+                showEmptyState();
             }
         }
 
-        // 로컬 스토리지에 데이터 저장 (트랙 정보만, 오디오 데이터 제외)
+        // 로컬 스토리지에 데이터 저장
         function saveData() {
+            console.log('데이터 저장 시도:', albums);
             try {
-                // 오디오 URL을 제외한 앨범 정보만 저장
-                const albumsToSave = albums.map(album => ({
-                    ...album,
-                    tracks: album.tracks.map(track => ({
-                        id: track.id,
-                        title: track.title,
-                        artist: track.artist,
-                        duration: track.duration,
-                        plays: track.plays,
-                        selected: false // 선택 상태는 저장하지 않음
-                    }))
-                }));
-                localStorage.setItem('musicAlbums', JSON.stringify(albumsToSave));
-                console.log('앨범 메타데이터 저장 완료');
+                localStorage.setItem('musicAlbums', JSON.stringify(albums));
+                console.log('데이터 저장 완료');
             } catch (error) {
-                console.error('저장 오류:', error);
+                console.error('LocalStorage 저장 오류:', error);
+                alert('데이터 저장에 실패했습니다. 파일 크기가 너무 클 수 있습니다.');
             }
         }
 
@@ -910,19 +829,6 @@
             const file = input.files[0];
             if (file && currentAlbum) {
                 console.log('앨범 커버 업로드:', file.name);
-                
-                // 이미지 파일 검증
-                if (!file.type.startsWith('image/')) {
-                    alert('이미지 파일만 업로드할 수 있습니다.');
-                    return;
-                }
-                
-                // 파일 크기 제한 (2MB)
-                if (file.size > 2 * 1024 * 1024) {
-                    alert('이미지 파일은 2MB 이하로 업로드해주세요.');
-                    return;
-                }
-                
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     currentAlbum.coverImage = e.target.result;
@@ -946,98 +852,39 @@
             }
             
             console.log('트랙 추가 시작, 파일 수:', files.length);
-            
-            // 로딩 상태 표시
-            const loadingState = document.getElementById('loadingState');
-            loadingState.style.display = 'block';
-            
-            let validFiles = [];
-            let invalidFiles = [];
-            
-            // 파일 유효성 검사
-            Array.from(files).forEach(file => {
-                console.log(`파일 검사: ${file.name}, 타입: ${file.type}, 크기: ${formatFileSize(file.size)}`);
-                
-                if (!isValidAudioFile(file)) {
-                    invalidFiles.push(file.name);
-                    return;
-                }
-                
-                if (file.size > 50 * 1024 * 1024) { // 50MB 제한
-                    invalidFiles.push(`${file.name} (파일 크기 초과: ${formatFileSize(file.size)})`);
-                    return;
-                }
-                
-                validFiles.push(file);
-            });
-            
-            // 유효하지 않은 파일들에 대한 알림
-            if (invalidFiles.length > 0) {
-                alert(`다음 파일들을 처리할 수 없습니다:\n${invalidFiles.join('\n')}\n\n지원되는 형식: MP3, WAV, M4A, MP4 (50MB 이하)`);
-            }
-            
-            if (validFiles.length === 0) {
-                loadingState.style.display = 'none';
-                return;
-            }
-            
             let filesProcessed = 0;
-            let successCount = 0;
-            
-            validFiles.forEach(file => {
+            Array.from(files).forEach(file => {
+                if (file.size > 5 * 1024 * 1024) { // 5MB 제한
+                    console.warn(`파일 크기 초과: ${file.name}`);
+                    alert(`파일 ${file.name}이 너무 큽니다. 5MB 이하 파일을 사용하세요.`);
+                    return;
+                }
+                
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    try {
-                        console.log('파일 로드 완료:', file.name);
-                        const track = {
-                            id: Date.now() + Math.random(),
-                            title: file.name.replace(/\.[^/.]+$/, ""),
-                            artist: currentAlbum.artist || '',
-                            url: e.target.result, // base64 데이터 URL 저장 (세션용)
-                            duration: 0,
-                            plays: 0,
-                            selected: false,
-                            fileSize: file.size,
-                            fileName: file.name
-                        };
-                        
-                        currentAlbum.tracks.push(track);
-                        successCount++;
-                        
-                        // 오디오 길이 가져오기 시도
-                        const audio = new Audio(track.url);
-                        audio.onloadedmetadata = function() {
-                            track.duration = audio.duration;
-                            console.log(`트랙 길이 설정: ${track.title} - ${formatTime(track.duration)}`);
-                        };
-                        
-                    } catch (error) {
-                        console.error('트랙 생성 오류:', file.name, error);
-                    }
+                    console.log('파일 로드 완료:', file.name);
+                    const track = {
+                        id: Date.now() + Math.random(),
+                        title: file.name.replace(/\.[^/.]+$/, ""),
+                        artist: currentAlbum.artist || '',
+                        url: e.target.result, // base64 데이터 URL 저장
+                        duration: 0,
+                        plays: 0,
+                        selected: false
+                    };
                     
+                    currentAlbum.tracks.push(track);
                     filesProcessed++;
-                    if (filesProcessed === validFiles.length) {
-                        console.log(`파일 처리 완료: ${successCount}/${validFiles.length} 성공`);
-                        loadingState.style.display = 'none';
+                    if (filesProcessed === files.length) {
+                        console.log('모든 파일 처리 완료, 트랙 렌더링');
                         saveData();
                         renderTracks();
-                        updateAlbumDisplay();
-                        
-                        if (successCount > 0) {
-                            alert(`${successCount}개의 트랙이 성공적으로 추가되었습니다!`);
-                        }
                     }
                 };
-                
                 reader.onerror = function(e) {
                     console.error('파일 로드 오류:', file.name, e);
-                    filesProcessed++;
-                    if (filesProcessed === validFiles.length) {
-                        loadingState.style.display = 'none';
-                        renderTracks();
-                    }
+                    alert(`파일 ${file.name} 로드에 실패했습니다.`);
                 };
-                
                 reader.readAsDataURL(file);
             });
         }
@@ -1048,19 +895,6 @@
             if (track) {
                 track.selected = checked;
                 console.log(`트랙 선택 상태 변경: ${track.title}, ${checked}`);
-                updateMergeButton();
-            }
-        }
-
-        // 합성 버튼 상태 업데이트
-        function updateMergeButton() {
-            const selectedTracks = currentAlbum.tracks.filter(track => track.selected);
-            const mergeBtn = document.getElementById('mergeBtn');
-            
-            if (selectedTracks.length >= 2 && selectedTracks.length <= 3 && crunker) {
-                mergeBtn.style.display = 'block';
-            } else {
-                mergeBtn.style.display = 'none';
             }
         }
 
@@ -1073,7 +907,6 @@
             if (!currentAlbum || currentAlbum.tracks.length === 0) {
                 tracksList.innerHTML = '';
                 emptyState.style.display = 'block';
-                document.getElementById('mergeBtn').style.display = 'none';
                 console.log('트랙 없음, 빈 상태 표시');
                 return;
             }
@@ -1085,18 +918,15 @@
                 const trackElement = document.createElement('div');
                 trackElement.className = 'track-item';
                 
-                const durationText = track.duration ? formatTime(track.duration) : '로딩 중...';
-                const fileSizeText = track.fileSize ? formatFileSize(track.fileSize) : '';
-                
                 trackElement.innerHTML = `
                     <input type="checkbox" ${track.selected ? 'checked' : ''} onchange="toggleTrackSelection(${track.id}, this.checked)" />
                     <div class="track-number">${index + 1}</div>
-                    <button class="play-btn" onclick="playTrack(${track.id})" ${!track.url ? 'disabled' : ''}>
+                    <button class="play-btn" onclick="playTrack(${track.id})">
                         ${currentTrack && currentTrack.id === track.id && isPlaying ? '⏸️' : '▶️'}
                     </button>
                     <div class="track-info">
                         <div class="track-title">${track.title}</div>
-                        <div class="track-artist">${track.artist || '알 수 없는 아티스트'} ${durationText ? `• ${durationText}` : ''} ${fileSizeText ? `• ${fileSizeText}` : ''}</div>
+                        <div class="track-artist">${track.artist || '알 수 없는 아티스트'}</div>
                     </div>
                     <div class="track-actions">
                         <button class="icon-btn delete" onclick="deleteTrack(${track.id})">🗑️</button>
@@ -1105,8 +935,6 @@
                 
                 tracksList.appendChild(trackElement);
             });
-            
-            updateMergeButton();
             console.log('트랙 렌더링 완료');
         }
 
@@ -1114,61 +942,44 @@
         async function mergeSelectedTracks() {
             console.log('트랙 합성 시작');
             const selectedTracks = currentAlbum.tracks.filter(track => track.selected);
-            
             if (selectedTracks.length < 2 || selectedTracks.length > 3) {
                 console.warn('선택된 트랙 수 부적합:', selectedTracks.length);
                 alert('2~3개의 트랙을 선택하세요.');
                 return;
             }
-            
-            if (!crunker) {
-                alert('오디오 합성 라이브러리를 사용할 수 없습니다.');
-                return;
-            }
-            
+            console.log('선택된 트랙:', selectedTracks.map(t => t.title));
             try {
-                console.log('선택된 트랙:', selectedTracks.map(t => t.title));
-                
-                // 로딩 상태 표시
-                const loadingState = document.getElementById('loadingState');
-                loadingState.style.display = 'block';
-                
+                console.log('오디오 로드 시도');
                 const buffers = await crunker.fetchAudio(...selectedTracks.map(track => track.url));
-                
+                console.log('오디오 로드 완료, 병합 시작');
                 const merged = crunker.mergeAudio(buffers);
-                const output = crunker.export(merged, 'audio/mp3');
+                console.log('병합 완료, 패딩 추가');
+                const padded = crunker.padAudio(merged, { seconds: 1 });
+                console.log('패딩 완료, 내보내기');
+                const output = crunker.export(padded, 'audio/mp3');
                 
                 const newTrack = {
                     id: Date.now() + Math.random(),
-                    title: `합성 트랙 ${currentAlbum.tracks.length + 1}`,
+                    title: '합성된 새로운 트랙 ' + (currentAlbum.tracks.length + 1),
                     artist: currentAlbum.artist || 'Mixed',
                     url: output.url,
                     duration: 0,
                     plays: 0,
-                    selected: false,
-                    fileSize: output.blob.size,
-                    fileName: `merged_track_${Date.now()}.mp3`
+                    selected: false
                 };
-                
                 currentAlbum.tracks.push(newTrack);
                 
-                // 선택 상태 해제
                 selectedTracks.forEach(track => track.selected = false);
                 
-                // 다운로드 제공
-                crunker.download(output.blob, newTrack.fileName);
+                crunker.download(output.blob, 'mixed_track.mp3');
                 
                 console.log('합성 완료, 새 트랙 추가');
-                loadingState.style.display = 'none';
                 saveData();
                 renderTracks();
-                updateAlbumDisplay();
-                alert('새로운 합성 트랙이 추가되었습니다! 파일 다운로드도 시작됩니다.');
-                
+                alert('새로운 합성 트랙이 추가되었습니다! 다운로드도 시작됩니다.');
             } catch (error) {
-                console.error('합성 오류:', error);
-                document.getElementById('loadingState').style.display = 'none';
-                alert('트랙 합성에 실패했습니다. 파일 형식을 확인하거나 파일 크기가 너무 클 수 있습니다.');
+                console.error('합성 오류 상세:', error);
+                alert('트랙 합성에 실패했습니다: ' + error.message);
             }
         }
 
@@ -1176,9 +987,8 @@
         function playTrack(trackId) {
             console.log('트랙 재생 시도:', trackId);
             const track = currentAlbum.tracks.find(t => t.id === trackId);
-            if (!track || !track.url) {
-                console.warn('트랙 없음 또는 URL 없음:', trackId);
-                alert('이 트랙을 재생할 수 없습니다. 파일이 로드되지 않았을 수 있습니다.');
+            if (!track) {
+                console.warn('트랙 없음:', trackId);
                 return;
             }
             
@@ -1190,10 +1000,7 @@
                     isPlaying = false;
                     console.log('재생 일시정지');
                 } else {
-                    audio.play().catch(error => {
-                        console.error('재생 오류:', error);
-                        alert('재생에 실패했습니다.');
-                    });
+                    audio.play().catch(error => console.error('재생 오류:', error));
                     isPlaying = true;
                     console.log('재생 시작');
                 }
@@ -1201,19 +1008,13 @@
                 currentTrack = track;
                 audio.src = track.url;
                 audio.load();
-                audio.play().catch(error => {
-                    console.error('재생 오류:', error);
-                    alert('재생에 실패했습니다.');
-                });
+                audio.play().catch(error => console.error('재생 오류:', error));
                 isPlaying = true;
                 
                 document.getElementById('playerTitle').textContent = track.title;
                 document.getElementById('playerArtist').textContent = track.artist || '알 수 없는 아티스트';
                 document.getElementById('player').classList.add('active');
                 console.log('새 트랙 재생:', track.title);
-                
-                // 재생 횟수 증가
-                track.plays = (track.plays || 0) + 1;
             }
             
             updatePlayerButton();
@@ -1234,10 +1035,7 @@
                 isPlaying = false;
                 console.log('플레이어 일시정지');
             } else {
-                audio.play().catch(error => {
-                    console.error('재생 오류:', error);
-                    alert('재생에 실패했습니다.');
-                });
+                audio.play().catch(error => console.error('재생 오류:', error));
                 isPlaying = true;
                 console.log('플레이어 재생');
             }
@@ -1284,7 +1082,7 @@
 
         // 시간 포맷팅
         function formatTime(seconds) {
-            if (isNaN(seconds) || !seconds) return '0:00';
+            if (isNaN(seconds)) return '0:00';
             
             const mins = Math.floor(seconds / 60);
             const secs = Math.floor(seconds % 60);
@@ -1327,7 +1125,6 @@
                 console.log('트랙 삭제:', trackId);
                 saveData();
                 renderTracks();
-                updateAlbumDisplay();
             }
         }
 
@@ -1352,10 +1149,12 @@
         function handleDragOver(event) {
             event.preventDefault();
             event.currentTarget.classList.add('dragover');
+            console.log('드래그 오버');
         }
 
         function handleDragLeave(event) {
             event.currentTarget.classList.remove('dragover');
+            console.log('드래그 떠남');
         }
 
         function handleDrop(event) {
@@ -1369,8 +1168,12 @@
 
         // 페이지 로드 시 초기화
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('페이지 로드 완료, 초기화 시작');
-            initializeCrunker();
+            if (typeof Crunker === 'undefined') {
+                console.error('Crunker 라이브러리 로드 실패');
+                alert('Crunker 라이브러리를 로드할 수 없습니다. 인터넷 연결을 확인하거나 로컬 파일로 실행 중인지 확인하세요.');
+            } else {
+                console.log('Crunker 라이브러리 로드 성공');
+            }
             loadData();
         });
     </script>
