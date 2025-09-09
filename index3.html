@@ -7,6 +7,7 @@
     <!-- Crunker 라이브러리 CDN -->
     <script src="https://cdn.jsdelivr.net/npm/crunker@2.4.0/dist/crunker.min.js"></script>
     <style>
+        /* 이전 CSS 동일 */
         * {
             margin: 0;
             padding: 0;
@@ -584,7 +585,7 @@
                          ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
                         <div style="font-size: 40px; margin-bottom: 15px;">📁</div>
                         <p>클릭하거나 파일을 여기로 드래그하여 곡을 추가하세요</p>
-                        <p style="font-size: 0.9em; opacity: 0.7; margin-top: 10px;">MP3, M4A, WAV 파일 지원 (최대 50MB 권장)</p> <!-- 파일 제한 수정 반영 -->
+                        <p style="font-size: 0.9em; opacity: 0.7; margin-top: 10px;">MP3, M4A, WAV 파일 지원 (최대 50MB 권장)</p>
                     </div>
                     
                     <div id="tracksList">
@@ -636,8 +637,7 @@
         let isEditing = false;
         let currentTrack = null;
         let isPlaying = false;
-        // CDN으로 불러온 경우, Crunker는 전역 변수로 바로 접근 가능
-        const crunker = new Crunker();
+        let crunker; // 초기화는 나중에
 
         // 로컬 스토리지에서 데이터 로드
         function loadData() {
@@ -833,7 +833,7 @@
             }
         }
 
-        // 트랙 추가 (파일 크기 제한 50MB로 수정)
+        // 트랙 추가 (파일 크기 제한 50MB)
         function addTracks(files) {
             if (!currentAlbum || !files.length) {
                 console.warn('앨범 없음 또는 파일 선택 안됨');
@@ -843,7 +843,7 @@
             console.log('트랙 추가 시작, 파일 수:', files.length);
             let filesProcessed = 0;
             Array.from(files).forEach(file => {
-                if (file.size > 50 * 1024 * 1024) { // 50MB 제한으로 수정
+                if (file.size > 50 * 1024 * 1024) {
                     console.warn(`파일 크기 초과: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)}MB / 50MB)`);
                     alert(`파일 ${file.name}이 너무 큽니다. 50MB 이하 파일을 사용하세요.`);
                     return;
@@ -885,7 +885,7 @@
             }
         }
 
-        // 트랙 렌더링
+        // 트랙 렌der링
         function renderTracks() {
             console.log('트랙 렌더링 시작');
             const tracksList = document.getElementById('tracksList');
@@ -1128,12 +1128,13 @@
 
         // 페이지 로드 시 초기화
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('페이지 로드, Crunker 상태:', typeof Crunker, crunker);
+            console.log('페이지 로드, Crunker 상태:', typeof Crunker);
             if (typeof Crunker === 'undefined') {
                 console.error('Crunker 라이브러리 로드 실패');
                 alert('Crunker 라이브러리를 로드할 수 없습니다. 인터넷 연결을 확인하세요.');
             } else {
                 console.log('Crunker 라이브러리 로드 성공');
+                crunker = new Crunker(); // 초기화
             }
             loadData();
         });
