@@ -4,7 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>나만의 음악 앨범 메이커</title>
-    <script src="https://unpkg.com/crunker@latest/crunker.min.js"></script>
+   // <script src="https://unpkg.com/crunker@2.4.0/dist/crunker.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/crunker@2.4.0/dist/crunker.min.js"></script>
+
+<script>
+  // CDN으로 불러온 경우, Crunker는 전역 변수로 바로 접근 가능합니다.
+  const crunker = new Crunker();
+  // ...
+</script>
     <style>
         /* 이전 CSS 동일 */
         * {
@@ -638,6 +645,19 @@
         let isPlaying = false;
         let crunker = new Crunker(); // Crunker 인스턴스 생성
 
+       // let crunker; // 전역 선언만, 초기화는 나중에
+        document.addEventListener('DOMContentLoaded', function() {
+            if (typeof Crunker === 'undefined') {
+                console.error('Crunker 라이브러리 로드 실패');
+                alert('Crunker 라이브러리를 로드할 수 없습니다.');
+            } else {
+                console.log('Crunker 라이브러리 로드 성공');
+                crunker = new Crunker(); // 여기서 초기화
+            }
+            loadData();
+        });
+
+
         // 로컬 스토리지에서 데이터 로드
         function loadData() {
             console.log('데이터 로드 시작');
@@ -939,49 +959,115 @@
         }
 
         // 선택된 트랙 합성
-        async function mergeSelectedTracks() {
-            console.log('트랙 합성 시작');
+        
+async function mergeSelectedTracks() {
+    console.log('트랙 합성 시작');
             const selectedTracks = currentAlbum.tracks.filter(track => track.selected);
             if (selectedTracks.length < 2 || selectedTracks.length > 3) {
                 console.warn('선택된 트랙 수 부적합:', selectedTracks.length);
                 alert('2~3개의 트랙을 선택하세요.');
                 return;
             }
-            console.log('선택된 트랙:', selectedTracks.map(t => t.title));
-            try {
-                console.log('오디오 로드 시도');
-                const buffers = await crunker.fetchAudio(...selectedTracks.map(track => track.url));
-                console.log('오디오 로드 완료, 병합 시작');
-                const merged = crunker.mergeAudio(buffers);
-                console.log('병합 완료, 패딩 추가');
-                const padded = crunker.padAudio(merged, { seconds: 1 });
-                console.log('패딩 완료, 내보내기');
-                const output = crunker.export(padded, 'audio/mp3');
-                
-                const newTrack = {
-                    id: Date.now() + Math.random(),
-                    title: '합성된 새로운 트랙 ' + (currentAlbum.tracks.length + 1),
-                    artist: currentAlbum.artist || 'Mixed',
-                    url: output.url,
-                    duration: 0,
-                    plays: 0,
-                    selected: false
-                };
-                currentAlbum.tracks.push(newTrack);
-                
-                selectedTracks.forEach(track => track.selected = false);
-                
-                crunker.download(output.blob, 'mixed_track.mp3');
-                
-                console.log('합성 완료, 새 트랙 추가');
-                saveData();
-                renderTracks();
-                alert('새로운 합성 트랙이 추가되었습니다! 다운로드도 시작됩니다.');
-            } catch (error) {
-                console.error('합성 오류 상세:', error);
-                alert('트랙 합성에 실패했습니다: ' + error.message);
+    try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const buffers = await Promise.all(selectedTracks.map(async (track) => {
+            const response = await fetch(track.url);
+            const arrayBuffer = await response.arrayBuffer();
+            return audioCtx.decodeAudioData(arrayBuffer);
+        }));
+        // Simple merge (mix by overlaying)
+        const maxLength = Math.max(...buffers.map(b => b.length));
+        const mergedBuffer = audioCtx.createBuffer(2, maxLength, buffers[0].sampleRate);
+        buffers.forEach(buffer => {
+            for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+                const data = buffer.getChannelData(channel);
+                mergedBuffer.getChannelData(channel).set(data);
             }
+        });
+        // Export to blob
+        const wavBlob = bufferToWave(mergedBuffer, mergedBuffer.length);
+        const url = URL.createObjectURL(wavBlob);
+        // Add new track (similar to before)
+        const newTrack = {
+            id: Date.now() + Math.random(),
+            title: '합성된 새로운 트랙 ' + (currentAlbum.tracks.length + 1),
+            artist: currentAlbum.artist || 'Mixed',
+            url: url,
+            duration: 0,
+            plays: 0,
+            selected: false
+        };
+        currentAlbum.tracks.push(newTrack);
+        // Download
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'mixed_track.wav';
+        a.click();
+        saveData();
+        renderTracks();
+        alert('새로운 합성 트랙이 추가되었습니다! 다운로드도 시작됩니다.');
+    } catch (error) {
+        console.error('합성 오류 상세:', error);
+        alert('트랙 합성에 실패했습니다: ' + error.message);
+    }
+}
+
+// Helper function for WAV export
+function bufferToWave(abuffer, len) {
+    let numOfChan = abuffer.numberOfChannels;
+    let length = len * numOfChan * 2 + 44;
+    let buffer = new ArrayBuffer(length);
+    let view = new DataView(buffer);
+    let channels = [];
+    let i, sample;
+    let offset = 0;
+    let pos = 0;
+
+    // write WAVE header
+    setUint32(0x46464952); // "RIFF"
+    setUint32(length - 8); // file length - 8
+    setUint32(0x45564157); // "WAVE"
+
+    setUint32(0x20746d66); // "fmt " chunk
+    setUint32(16); // length = 16
+    setUint16(1); // PCM (uncompressed)
+    setUint16(numOfChan);
+    setUint32(abuffer.sampleRate);
+    setUint32(abuffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+    setUint16(numOfChan * 2); // block-align
+    setUint16(16); // 16-bit (hardcoded in this demo)
+
+    setUint32(0x61746164); // "data" - chunk
+    setUint32(length - pos - 4); // chunk length
+
+    // write interleaved data
+    for (i = 0; i < abuffer.numberOfChannels; i++)
+        channels.push(abuffer.getChannelData(i));
+
+    while (pos < length) {
+        for (i = 0; i < numOfChan; i++) { // interleave channels
+            sample = Math.max(-1, Math.min(1, channels[i][offset])); // clamp
+            sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767); // scale to 16-bit signed int
+            view.setInt16(pos, sample, true); // write 16-bit sample (little endian)
+            pos += 2;
         }
+        offset++; // next source sample
+    }
+
+    // create Blob
+    return new Blob([buffer], { type: "audio/wav" });
+
+    function setUint16(data) {
+        view.setUint16(pos, data, true);
+        pos += 2;
+    }
+
+    function setUint32(data) {
+        view.setUint32(pos, data, true);
+        pos += 4;
+    }
+}
+
 
         // 트랙 재생
         function playTrack(trackId) {
